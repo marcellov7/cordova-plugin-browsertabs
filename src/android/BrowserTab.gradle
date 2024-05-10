@@ -1,2 +1,2 @@
 def minSdkVersion = 26
-def compileSdkVersion = 31
+def compileSdkVersion = 33
