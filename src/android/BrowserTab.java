@@ -151,39 +151,40 @@ public class BrowserTab extends CordovaPlugin {
   private void openUrl(JSONArray args, CallbackContext callbackContext) {
     isInvokedActivitResultClose = false;
     if (args.length() < 1) {
-      Log.d(LOG_TAG, "openUrl: no url argument received");
-      callbackContext.error("URL argument missing");
-      return;
+        Log.d(LOG_TAG, "openUrl: no url argument received");
+        callbackContext.error("URL argument missing");
+        return;
     }
 
     String urlStr;
     try {
-      urlStr = args.getString(0);
-      JSONObject options = args.getJSONObject(1);
-      if(options.has("scheme") && options.getString("scheme").length() != 0) {
-        lastScheme = options.getString("scheme");
-      }
+        urlStr = args.getString(0);
+        JSONObject options = args.getJSONObject(1);
+        if(options.has("scheme") && options.getString("scheme").length() != 0) {
+            lastScheme = options.getString("scheme");
+        }
 
     } catch (JSONException e) {
-      Log.d(LOG_TAG, "openUrl: failed to parse url argument");
-      callbackContext.error("URL argument is not a string");
-      return;
+        Log.d(LOG_TAG, "openUrl: failed to parse url argument");
+        callbackContext.error("URL argument is not a string");
+        return;
     }
 
     String customTabsBrowser = findCustomTabBrowser();
     if (customTabsBrowser == null) {
-      Log.d(LOG_TAG, "openUrl: no in app browser tab available");
-      callbackContext.error("no in app browser tab implementation available");
+        Log.d(LOG_TAG, "openUrl: no in app browser tab available");
+        callbackContext.error("no in app browser tab implementation available");
     }
 
-    Intent customTabsIntent = new CustomTabsIntent.Builder().build().intent;
-    customTabsIntent.setData(Uri.parse(urlStr));
-    customTabsIntent.setPackage(mCustomTabsBrowser);
-    cordova.startActivityForResult(this, customTabsIntent, CUSTOM_TAB_REQUEST_CODE);
+    CustomTabsIntent.Builder builder = new CustomTabsIntent.Builder();
+    CustomTabsIntent customTabsIntent = builder.build();
+    customTabsIntent.intent.setPackage(customTabsBrowser);
+    customTabsIntent.launchUrl(cordova.getActivity(), Uri.parse(urlStr));
 
     this.callbackContext = callbackContext;
     sendOpenResult(callbackContext);
   }
+
 
   @Override
   public void onActivityResult(int requestCode, int resultCode, Intent intent) {
