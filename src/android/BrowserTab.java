@@ -19,105 +19,94 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
-import android.provider.Browser;
 import androidx.browser.customtabs.CustomTabsIntent;
 import android.util.Log;
 
-import java.util.Iterator;
-import java.util.List;
-
 import org.apache.cordova.CallbackContext;
-import org.apache.cordova.CordovaInterface;
 import org.apache.cordova.CordovaPlugin;
-import org.apache.cordova.CordovaWebView;
-import org.apache.cordova.LOG;
 import org.apache.cordova.PluginResult;
-
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-/**
- * Cordova plugin which provides the ability to launch a URL in an
- * in-app browser tab. On Android, this means using the custom tabs support
- * library, if a supporting browser (e.g. Chrome) is available on the device.
- */
+import java.util.Iterator;
+import java.util.List;
+
 public class BrowserTab extends CordovaPlugin {
 
-  public static final int RC_OPEN_URL = 101;
-  public static final int CUSTOM_TAB_REQUEST_CODE = 1;
+    private static final String LOG_TAG = "BrowserTab";
+    private String mCustomTabsBrowser;
+    private CallbackContext callbackContext;
 
-  private static final String LOG_TAG = "BrowserTab";
-
-  /**
-   * The service we expect to find on a web browser that indicates it supports custom tabs.
-   */
-  private static final String ACTION_CUSTOM_TABS_CONNECTION =
-          "android.support.customtabs.action.CustomTabsService";
-
-  private boolean mFindCalled = false;
-  private String mCustomTabsBrowser;
-  private String lastScheme;
-  private boolean isInvokedActivitResultClose = false;
-  private CallbackContext callbackContext;
-
-  @Override
-  public boolean execute(String action, JSONArray args, CallbackContext callbackContext) {
-    Log.d(LOG_TAG, "executing " + action);
-    if ("isAvailable".equals(action)) {
-      isAvailable(callbackContext);
-    } else if ("openUrl".equals(action)) {
-      openUrl(args, callbackContext);
-    } else if("openUrlInBrowser".equals(action)) {
-      openExternal(args, callbackContext);
-    } else if ("close".equals(action)) {
-      // Make sure that task
-      if(closeCustomTab()) {
-        callbackContext.success();
-      } else {
-        callbackContext.error("Launch Mode of activity isn't \"singleTask\". Please change it to make this method workable");
-      }
-    } else {
-      return false;
+    @Override
+    public boolean execute(String action, JSONArray args, CallbackContext callbackContext) {
+        if ("openUrl".equals(action)) {
+            openUrl(args, callbackContext);
+            return true;
+        }
+        return false;
     }
 
-    return true;
-  }
+    private void openUrl(JSONArray args, CallbackContext callbackContext) {
+        if (args.length() < 1) {
+            callbackContext.error("URL argument missing");
+            return;
+        }
 
-  private boolean closeCustomTab() {
-    Activity activity = this.cordova.getActivity();
-    if(activity.getIntent().getFlags() == Intent.FLAG_ACTIVITY_NEW_TASK) {
-      Intent intent = new Intent(activity, activity.getClass());
-      intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-      activity.startActivity(intent);
-      return true;
-    } else {
-      return false;
+        String urlStr;
+        try {
+            urlStr = args.getString(0);
+        } catch (JSONException e) {
+            callbackContext.error("URL argument is not a string");
+            return;
+        }
+
+        String customTabsBrowser = findCustomTabBrowser();
+        if (customTabsBrowser == null) {
+            callbackContext.error("No in-app browser tab implementation available");
+            return;
+        }
+
+        CustomTabsIntent.Builder builder = new CustomTabsIntent.Builder();
+        CustomTabsIntent customTabsIntent = builder.build();
+        customTabsIntent.intent.setPackage(customTabsBrowser);
+        customTabsIntent.launchUrl(cordova.getActivity(), Uri.parse(urlStr));
+
+        this.callbackContext = callbackContext;
+        sendOpenResult(callbackContext);
     }
-  }
 
-  private void isAvailable(CallbackContext callbackContext) {
-    String browserPackage = findCustomTabBrowser();
-    Log.d(LOG_TAG, "browser package: " + browserPackage);
-    callbackContext.sendPluginResult(new PluginResult(
-        PluginResult.Status.OK,
-        browserPackage != null));
-  }
+    private String findCustomTabBrowser() {
+        if (mCustomTabsBrowser != null) {
+            return mCustomTabsBrowser;
+        }
 
-  private void sendCloseResult(CallbackContext callbackContext) {
-    PluginResult pluginResult = new PluginResult(PluginResult.Status.OK, "");
-    callbackContext.sendPluginResult(pluginResult);
-  }
+        PackageManager pm = cordova.getActivity().getPackageManager();
+        Intent webIntent = new Intent(Intent.ACTION_VIEW, Uri.parse("http://www.example.com"));
+        List<ResolveInfo> resolvedActivityList = pm.queryIntentActivities(webIntent, PackageManager.GET_RESOLVED_FILTER);
 
-  private void sendSuccessResult(CallbackContext callbackContext, String url) {
-    PluginResult pluginResult = new PluginResult(PluginResult.Status.OK, url);
-    callbackContext.sendPluginResult(pluginResult);
-  }
+        for (ResolveInfo info : resolvedActivityList) {
+            if (supportsCustomTabs(pm, info.activityInfo.packageName)) {
+                mCustomTabsBrowser = info.activityInfo.packageName;
+                return mCustomTabsBrowser;
+            }
+        }
 
-  private void sendOpenResult(CallbackContext callbackContext) {
-    PluginResult pluginResult = new PluginResult(PluginResult.Status.ERROR, 1);
-    pluginResult.setKeepCallback(true);
-    callbackContext.sendPluginResult(pluginResult);
+        return null;
+    }
+
+    private boolean supportsCustomTabs(PackageManager pm, String packageName) {
+        Intent serviceIntent = new Intent();
+        serviceIntent.setAction("android.support.customtabs.action.CustomTabsService");
+        serviceIntent.setPackage(packageName);
+        return (pm.resolveService(serviceIntent, 0) != null);
+    }
+
+    private void sendOpenResult(CallbackContext callbackContext) {
+        PluginResult pluginResult = new PluginResult(PluginResult.Status.OK, 0);
+        pluginResult.setKeepCallback(true);
+        callbackContext.sendPluginResult(pluginResult);
+    }
   }
 
   @Override
